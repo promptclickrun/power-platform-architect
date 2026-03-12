@@ -6,13 +6,13 @@
   },
   "metadata": {
     "description": "Architecture analysis and documentation tools for Power Platform, Copilot Studio, and Azure AI Foundry solutions.",
-    "version": "1.0.0"
+    "version": "1.0.1"
   },
   "plugins": [
     {
       "name": "power-agents-blueprint",
       "description": "Analyzes Power Platform and Copilot Studio solutions, generates interactive HTML architecture dashboards with Mermaid diagrams, ERDs, data flows, and optional shareable PageDrop links.",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "source": "./",
       "author": {
         "name": "promptclickrun",
