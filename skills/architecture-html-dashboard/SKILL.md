@@ -2,13 +2,14 @@
 name: architecture-html-dashboard
 description: >
   Generates a self-contained, interactive HTML dashboard for Power Platform and
-  Copilot Studio architecture documentation. Features Mermaid diagrams, dark theme,
-  responsive layout, clickable stat cards with slide-in detail drawers, and tabbed content.
+  Copilot Studio architecture documentation. Features pure inline SVG diagrams,
+  dark theme, responsive layout, clickable stat cards with slide-in detail drawers,
+  and tabbed content. No external dependencies — zero CDN calls.
 ---
 
 # Skill: Architecture HTML Dashboard Template
 
-> Generates a self-contained, interactive HTML dashboard for Power Platform and Copilot Studio architecture documentation. Features Mermaid diagrams, dark theme, responsive layout, clickable stat cards with slide-in detail drawers, and tabbed content.
+> Generates a self-contained, interactive HTML dashboard for Power Platform and Copilot Studio architecture documentation. Features pure inline SVG diagrams (no Mermaid), dark theme, responsive layout, clickable stat cards with slide-in detail drawers, and tabbed content. Fully self-contained — no CDN or external scripts.
 
 ---
 
@@ -20,64 +21,282 @@ Use this skill when generating an architecture analysis as a **single self-conta
 - Hero section with solution name, badge, and description
 - Clickable stat cards → slide-in modal drawers with expandable detail cards
 - Five tabbed content panels: Architecture, ERD, Data Flows, Components, Notes
-- Mermaid v11+ diagrams with proper hidden-tab rendering
+- **Pure inline SVG diagrams** — no Mermaid, no CDN, no external dependencies
 - Zoom controls for diagrams
 - Full print stylesheet
+
+### Why SVG Instead of Mermaid
+
+Mermaid v11 has critical rendering issues that make it unreliable for production dashboards:
+
+- **Emoji failures:** Emojis in subgraph labels cause parse failures
+- **Newline breakage:** `\n` in node/edge labels breaks rendering
+- **Colon failures:** Colons in edge labels fail to parse
+- **Hidden tab rendering:** `display:none` containers prevent Mermaid rendering entirely
+- **CDN fragility:** CDN loading can fail silently, leaving blank diagram panels
+
+Pure inline SVG eliminates all of these issues. Diagrams render instantly, work in hidden tabs, support any Unicode text, and require zero external resources.
 
 ---
 
 ## Critical Rendering Rules
 
-### Mermaid in Hidden Tabs
+### Architecture SVG Rules
 
-**Mermaid cannot render into `display: none` containers.** Follow this exact sequence:
+#### Canvas Setup
 
-1. All `.tab-content` elements start **visible** (no `display: none` on page load)
-2. Initialize Mermaid with `startOnLoad: false`
-3. Call `mermaid.run()` explicitly
-4. In the `.then()` callback, call `switchTab('arch')` to hide inactive tabs
-5. Tab CSS uses `.tab-content.hidden { display: none; }` — the `hidden` class is only added AFTER Mermaid renders
+Every architecture diagram uses this SVG wrapper:
+
+```xml
+<svg viewBox="0 0 1400 1200" xmlns="http://www.w3.org/2000/svg"
+     style="width:100%;height:auto;font-family:'Segoe UI',sans-serif;">
+```
+
+Adjust the `viewBox` height (1200) based on the number of tiers. Each tier needs ~140-180px including spacing.
+
+#### Required Defs Section
+
+Always include this `<defs>` block as the first child of every architecture SVG. It defines arrowhead markers (one per tier color) and a glow filter for hero components:
+
+```xml
+<defs>
+    <marker id="ah" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+        <polygon points="0 0,10 3.5,0 7" fill="#64748b"/>
+    </marker>
+    <marker id="ah-blue" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+        <polygon points="0 0,10 3.5,0 7" fill="#3b82f6"/>
+    </marker>
+    <marker id="ah-green" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+        <polygon points="0 0,10 3.5,0 7" fill="#10b981"/>
+    </marker>
+    <marker id="ah-orange" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+        <polygon points="0 0,10 3.5,0 7" fill="#f59e0b"/>
+    </marker>
+    <marker id="ah-purple" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+        <polygon points="0 0,10 3.5,0 7" fill="#a855f7"/>
+    </marker>
+    <marker id="ah-cyan" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+        <polygon points="0 0,10 3.5,0 7" fill="#06b6d4"/>
+    </marker>
+    <filter id="glow">
+        <feGaussianBlur stdDeviation="3" result="blur"/>
+        <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+</defs>
+```
+
+#### Tier Layout System
+
+Architecture diagrams are organized into **horizontal tiers** stacked vertically. Each tier represents a logical layer of the solution (e.g., Intake, Triggers, Agent, External API, Data/AI, Fulfillment).
+
+**Tier Background:**
+```xml
+<rect x="20" y="[tierY]" width="1360" height="[tierHeight]" rx="14"
+      fill="[tier-dark-color]" stroke="[tier-accent]" stroke-width="1.5" opacity="0.5"/>
+```
+
+**Tier Label** — positioned at top-left inside the background:
+```xml
+<text x="40" y="[tierY+22]" fill="[tier-accent]" font-size="11" font-weight="700"
+      text-transform="uppercase" letter-spacing="1.5">[TIER NAME]</text>
+```
+
+**Component Boxes** — placed inside tier backgrounds:
+```xml
+<rect x="[boxX]" y="[boxY]" width="[boxW]" height="[boxH]" rx="8"
+      fill="[darker-shade]" stroke="[tier-accent]" stroke-width="1.2"/>
+<text x="[centerX]" y="[textY]" fill="#e2e8f0" font-size="11" font-weight="600"
+      text-anchor="middle">[Component Name]</text>
+<text x="[centerX]" y="[textY+15]" fill="[tier-accent]" font-size="9"
+      text-anchor="middle">[subtitle or type]</text>
+```
+
+**Hero/Primary Components** get a glow effect and thicker stroke:
+```xml
+<rect ... filter="url(#glow)" stroke-width="2"/>
+```
+
+**Vertical Spacing:** Leave 85-110px gaps between tier backgrounds to provide space for connection routing.
+
+#### Tier Color Reference
+
+| Tier | Purpose | Stroke/Accent | Fill (background) | Fill (component box) |
+|------|---------|---------------|--------------------|--------------------|
+| Intake | Input channels | `#3b82f6` | `#0f1d32` | `#1e3a5f` |
+| Triggers | Automation flows | `#8b5cf6` | `#1a1040` | `#2d1b69` |
+| Agent | Copilot agents | `#10b981` | `#0d2618` | `#1a4731` |
+| External API | Graph, REST calls | `#a855f7` | `#200d28` | `#3b1d3f` |
+| Data/AI | Dataverse, AI Builder | `#06b6d4` / `#f59e0b` | `#0a1e2e` / `#261508` | `#1e3a5f` / `#4a2c17` |
+| Approval | Workflows, approvals | `#f59e0b` | `#261508` | `#4a2c17` |
+| Fulfillment | Output actions | `#10b981` | `#0d2618` | `#1a4731` |
+
+### ERD SVG Rules
+
+#### Canvas Setup
+
+```xml
+<svg viewBox="0 0 1200 850" xmlns="http://www.w3.org/2000/svg"
+     style="width:100%;height:auto;font-family:'Segoe UI',sans-serif;">
+```
+
+Adjust the `viewBox` dimensions based on entity count. Plan ~400px width per entity column, ~200-300px height per entity.
+
+#### Entity Box Structure
+
+Each entity is drawn as a header bar + body rect with field rows:
+
+```xml
+<!-- Entity: EntityName -->
+<!-- Header bar -->
+<rect x="30" y="30" width="370" height="40" rx="10" fill="#1e3a5f"/>
+<rect x="30" y="60" width="370" height="2" fill="#3b82f6"/>
+<text x="215" y="56" fill="#e2e8f0" font-size="14" font-weight="700"
+      text-anchor="middle">EntityName</text>
+
+<!-- Body -->
+<rect x="30" y="62" width="370" height="[bodyHeight]" rx="0 0 10 10"
+      fill="#111827" stroke="#1e2d4a" stroke-width="1"/>
+
+<!-- Field row (20px line height, start at y=86) -->
+<text x="48" y="86" fill="#f59e0b" font-size="10" font-weight="700">PK</text>
+<text x="78" y="86" fill="#e2e8f0" font-size="11" font-weight="600">FieldName</text>
+<text x="380" y="86" fill="#8896b3" font-size="10" text-anchor="end">string</text>
+<line x1="42" y1="95" x2="388" y2="95" stroke="#1e2d4a" stroke-width="1"/>
+
+<!-- Next field row at y=106 -->
+<text x="48" y="106" fill="#3b82f6" font-size="10" font-weight="700">FK</text>
+<text x="78" y="106" fill="#e2e8f0" font-size="11">RelatedField</text>
+<text x="380" y="106" fill="#8896b3" font-size="10" text-anchor="end">guid</text>
+<line x1="42" y1="115" x2="388" y2="115" stroke="#1e2d4a" stroke-width="1"/>
+```
+
+**Field annotation colors:**
+- `PK` → `fill="#f59e0b"` (orange)
+- `FK` → `fill="#3b82f6"` (blue)
+- Regular fields → no annotation column, text starts at `x="48"`
+
+#### Crow's Foot Relationship Notation
+
+Draw relationships using `<line>` or `<path>` elements with crow's foot markers at endpoints:
+
+**"One" marker** (perpendicular bar):
+```xml
+<line x1="[x-7]" y1="[y]" x2="[x+7]" y2="[y]" stroke="[color]" stroke-width="2"/>
+```
+
+**"Many" marker** (fork lines + circle):
+```xml
+<line x1="[x-8]" y1="[y-8]" x2="[x]" y2="[y]" stroke="[color]" stroke-width="2"/>
+<line x1="[x+8]" y1="[y-8]" x2="[x]" y2="[y]" stroke="[color]" stroke-width="2"/>
+<circle cx="[x]" cy="[y-7]" r="4" fill="none" stroke="[color]" stroke-width="1.5"/>
+```
+
+**"Zero-or" modifier** — add a small open circle before the bar or fork:
+```xml
+<circle cx="[x]" cy="[y-12]" r="4" fill="none" stroke="[color]" stroke-width="1.5"/>
+```
+
+**Relationship labels** — use opaque pill labels at the midpoint of each connecting line:
+```xml
+<rect x="[labelX-halfW]" y="[labelY-10]" width="[w]" height="16" rx="4"
+      fill="#0a0e1a" opacity="0.92"/>
+<text x="[labelCenterX]" y="[labelY+2]" fill="[color]" font-size="9"
+      text-anchor="middle">[relationship label]</text>
+```
+
+Route relationship lines through gaps between entity columns (typically 130-150px gap between columns).
+
+---
+
+## SVG Design Principles
+
+### Non-Crossing Connection Routing Algorithm
+
+This is the most critical rule for readable architecture diagrams. Connections between tiers MUST NOT cross each other.
+
+**Use L-shaped routes** with SVG `<path>` elements:
+```xml
+<path d="M x1,y1 V yMid H x2 V y2" fill="none"
+      stroke="[color]" stroke-width="1.5" marker-end="url(#ah-[color])"/>
+```
+
+The `d` attribute means: start at (x1,y1), go Vertical to yMid, go Horizontal to x2, go Vertical to y2.
+
+**The Stagger Rule (prevents crossings):**
+
+When multiple connections enter the same tier from above, stagger their landing x-positions from **LEFT to RIGHT**, and stagger their horizontal routing y-positions at incrementing y-values.
+
+Example — 4 connections dropping from Tier 1 into Tier 2:
+```
+Connection 1: lands at x=150, horizontal at y=328
+Connection 2: lands at x=200, horizontal at y=343
+Connection 3: lands at x=250, horizontal at y=358
+Connection 4: lands at x=300, horizontal at y=373
+```
+
+Each subsequent connection lands further right and routes at a lower y-value, so horizontal segments never cross vertical drops from earlier connections.
+
+**Primary flow:** solid lines, `stroke-width="1.5"`
+**Secondary/return flow:** `stroke-dasharray="5,3"` or `"6,3"`, `stroke-width="1"`
+**Left gutter (x < 60):** route return/feedback paths along the left edge
+**Right gutter (x > 1300):** route re-invoke/callback paths along the right edge
+
+### Opaque Pill Labels
+
+Every connection line MUST have a label explaining what flows through it. Labels use an opaque background pill so they remain readable over connection lines and tier backgrounds:
+
+```xml
+<!-- Pill background -->
+<rect x="[labelX - halfWidth]" y="[labelY - 12]" width="[pillWidth]" height="16"
+      rx="4" fill="#0a0e1a" opacity="0.92"/>
+<!-- Label text -->
+<text x="[labelCenterX]" y="[labelY]" fill="[tier-accent-color]" font-size="9"
+      text-anchor="middle">[Label Text]</text>
+```
+
+Place labels at the midpoint of the longest segment of each connection path (usually the horizontal segment).
+
+### Step Number Badges
+
+For sequential flows within a tier (e.g., steps 1→2→3 inside an Agent tier), use numbered circle badges:
+
+```xml
+<circle cx="[x]" cy="[y]" r="9" fill="#0d2618" stroke="#10b981" stroke-width="1.2"/>
+<text x="[x]" y="[y+4]" fill="#10b981" font-size="8" font-weight="700"
+      text-anchor="middle">1</text>
+```
+
+### Glow Effects for Hero Components
+
+The primary/hero component in the diagram (e.g., the main Copilot agent) should stand out with a glow filter and thicker stroke:
+
+```xml
+<rect x="..." y="..." width="..." height="..." rx="10"
+      fill="#1a4731" stroke="#10b981" stroke-width="2" filter="url(#glow)"/>
+```
+
+### Legend
+
+Include a color-coded legend at the bottom of each diagram panel mapping tier colors to their purpose:
 
 ```html
-<!-- CSS: Tabs start visible, hidden class added by JS after render -->
-.tab-content { animation: fadeIn 0.3s ease; }
-.tab-content.hidden { display: none; }
-.tab-content.active { display: block; }
+<div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:#3b82f6"></div>Intake</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#8b5cf6"></div>Triggers</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#10b981"></div>Agent / Fulfillment</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#a855f7"></div>External API</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#06b6d4"></div>Data</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#f59e0b"></div>AI / Approval</div>
+</div>
 ```
-
-```javascript
-// Initialize without auto-start
-mermaid.initialize({ startOnLoad: false, theme: 'dark', /* ... */ });
-
-// Render all diagrams while visible, THEN hide inactive tabs
-mermaid.run().then(() => {
-    switchTab('arch'); // This hides non-active tabs
-});
-```
-
-### ERD Syntax Rules (Mermaid v11+)
-
-- Use ONLY `string`, `int`, `float`, `boolean` as attribute types
-- Do NOT use `guid`, `datetime`, `uniqueidentifier` — map them to `string`
-- Only `PK` and `FK` are valid annotations — do NOT use `UK`, `NN`, `UNIQUE`
-- Relationship labels MUST be in double quotes: `ENTITY_A ||--o{ ENTITY_B : "label"`
-- Valid relationship markers: `||` (exactly one), `|o` (zero or one), `}|` (one or more), `}o` (zero or more)
-- Test every entity name, attribute name, and relationship for valid syntax
-
-### Architecture Diagram Rules (Mermaid Flowchart)
-
-- Use `graph TB` for top-to-bottom layout
-- Group components into `subgraph` blocks with clear labels
-- Use `-->` for control flow, `-.->` for data/query flow
-- Use `classDef` for color coding each layer
-- Use `\n` for line breaks in node labels (not `<br>`)
-- Keep node IDs short (e.g., `FA_S1`, `T_IN`) — put descriptive text in labels
 
 ---
 
 ## Full HTML Template
 
 Replace all `{{PLACEHOLDER}}` values with real data from your analysis. The template is the structural skeleton — populate every section with solution-specific content.
+
+**IMPORTANT:** This template has **no external dependencies**. No `<script src="...">` tags, no CDN calls. Diagrams are pure inline SVG embedded directly in the HTML.
 
 ```html
 <!DOCTYPE html>
@@ -86,7 +305,7 @@ Replace all `{{PLACEHOLDER}}` values with real data from your analysis. The temp
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{SOLUTION_NAME}} — Architecture & ERD</title>
-    <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+    <!-- NO external scripts — diagrams are pure inline SVG -->
     <style>
         /* === RESET & VARIABLES === */
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -232,8 +451,7 @@ Replace all `{{PLACEHOLDER}}` values with real data from your analysis. The temp
         .diagram-panel-header { display: flex; align-items: center; justify-content: space-between; padding: 1rem 1.5rem; border-bottom: 1px solid var(--border); background: var(--surface-alt); }
         .diagram-panel-header h3 { font-size: 1rem; font-weight: 600; display: flex; align-items: center; gap: 0.5rem; }
         .diagram-panel-body { padding: 2rem; overflow-x: auto; min-height: 400px; display: flex; align-items: center; justify-content: center; }
-        .diagram-panel-body .mermaid { width: 100%; }
-        .diagram-panel-body .mermaid svg { max-width: 100%; height: auto; }
+        .diagram-panel-body svg { width: 100%; height: auto; }
         .legend { display: flex; flex-wrap: wrap; gap: 1rem; padding: 1rem 1.5rem; border-top: 1px solid var(--border); background: var(--surface-alt); }
         .legend-item { display: flex; align-items: center; gap: 0.4rem; font-size: 0.78rem; color: var(--text-muted); }
         .legend-dot { width: 10px; height: 10px; border-radius: 3px; }
@@ -346,20 +564,73 @@ Replace all `{{PLACEHOLDER}}` values with real data from your analysis. The temp
         <button class="tab-btn" data-tab="notes" role="tab">Notes</button>
     </div>
 
-    <!-- All tab-content divs start WITHOUT .hidden — Mermaid renders first -->
+    <!-- Architecture Tab — inline SVG, no library needed -->
     <div class="tab-content active" id="tab-arch">
-        <!-- Architecture diagram panel with zoom controls and legend -->
+        <div class="diagram-panel">
+            <div class="diagram-panel-header">
+                <h3>Solution Architecture</h3>
+                <div class="zoom-controls">
+                    <button class="zoom-btn" onclick="zoom('archDiagram', -0.15)">−</button>
+                    <button class="zoom-btn" onclick="zoom('archDiagram', 0.15)">+</button>
+                </div>
+            </div>
+            <div class="diagram-panel-body">
+                <div id="archDiagram" style="width:100%;">
+                    <svg viewBox="0 0 1400 1200" xmlns="http://www.w3.org/2000/svg"
+                         style="width:100%;height:auto;font-family:'Segoe UI',sans-serif;">
+                        <!-- {{ARCHITECTURE_SVG}} -->
+                        <!-- Include <defs> with markers and glow filter -->
+                        <!-- Draw tier backgrounds, component boxes, connections, pill labels -->
+                    </svg>
+                </div>
+            </div>
+            <div class="legend">
+                <!-- Color-coded legend items matching tier colors -->
+                <div class="legend-item"><div class="legend-dot" style="background:#3b82f6"></div>Intake</div>
+                <div class="legend-item"><div class="legend-dot" style="background:#8b5cf6"></div>Triggers</div>
+                <div class="legend-item"><div class="legend-dot" style="background:#10b981"></div>Agent / Fulfillment</div>
+                <div class="legend-item"><div class="legend-dot" style="background:#a855f7"></div>External API</div>
+                <div class="legend-item"><div class="legend-dot" style="background:#06b6d4"></div>Data</div>
+                <div class="legend-item"><div class="legend-dot" style="background:#f59e0b"></div>AI / Approval</div>
+            </div>
+        </div>
     </div>
-    <div class="tab-content" id="tab-erd">
-        <!-- ERD diagram panel with zoom controls and legend -->
+
+    <!-- ERD Tab — inline SVG with crow's foot notation -->
+    <div class="tab-content hidden" id="tab-erd">
+        <div class="diagram-panel">
+            <div class="diagram-panel-header">
+                <h3>Entity Relationship Diagram</h3>
+                <div class="zoom-controls">
+                    <button class="zoom-btn" onclick="zoom('erdDiagram', -0.15)">−</button>
+                    <button class="zoom-btn" onclick="zoom('erdDiagram', 0.15)">+</button>
+                </div>
+            </div>
+            <div class="diagram-panel-body">
+                <div id="erdDiagram" style="width:100%;">
+                    <svg viewBox="0 0 1200 850" xmlns="http://www.w3.org/2000/svg"
+                         style="width:100%;height:auto;font-family:'Segoe UI',sans-serif;">
+                        <!-- {{ERD_SVG}} -->
+                        <!-- Draw entity boxes with header/body/fields -->
+                        <!-- Draw relationship lines with crow's foot markers and pill labels -->
+                    </svg>
+                </div>
+            </div>
+            <div class="legend">
+                <div class="legend-item"><div class="legend-dot" style="background:#f59e0b"></div>Primary Key</div>
+                <div class="legend-item"><div class="legend-dot" style="background:#3b82f6"></div>Foreign Key</div>
+                <div class="legend-item"><div class="legend-dot" style="background:#8896b3"></div>Attribute</div>
+            </div>
+        </div>
     </div>
-    <div class="tab-content" id="tab-flow">
+
+    <div class="tab-content hidden" id="tab-flow">
         <!-- Data flow cards with timeline steps and decision branches -->
     </div>
-    <div class="tab-content" id="tab-inventory">
+    <div class="tab-content hidden" id="tab-inventory">
         <!-- Inventory grid cards -->
     </div>
-    <div class="tab-content" id="tab-notes">
+    <div class="tab-content hidden" id="tab-notes">
         <!-- Notes grid: Strengths, Considerations, Dependencies, Security, Env Vars, ROI -->
     </div>
 </div>
@@ -424,14 +695,9 @@ Replace all `{{PLACEHOLDER}}` values with real data from your analysis. The temp
         el.style.transformOrigin = 'top center';
     }
 
-    // Mermaid init — CRITICAL: render while all tabs visible, then hide
-    mermaid.initialize({
-        startOnLoad: false, theme: 'dark',
-        themeVariables: { primaryColor: '#1e3a5f', primaryBorderColor: '#3b82f6', primaryTextColor: '#e2e8f0', lineColor: '#3b82f6', secondaryColor: '#1a2236', tertiaryColor: '#111827' },
-        flowchart: { htmlLabels: true, curve: 'basis', padding: 15, nodeSpacing: 40, rankSpacing: 60 },
-        er: { layoutDirection: 'TB', minEntityWidth: 180, minEntityHeight: 40, entityPadding: 12, fontSize: 13, useMaxWidth: true }
-    });
-    mermaid.run().then(() => { switchTab('arch'); });
+    // No diagram library needed — SVGs are inline
+    // Initialize default tab immediately
+    switchTab('arch');
 </script>
 </body>
 </html>
@@ -448,6 +714,8 @@ Replace all `{{PLACEHOLDER}}` values with real data from your analysis. The temp
 | `{{KEY}}` | Modal data key for stat card | `agents`, `aiModels`, `flows` |
 | `{{VALUE}}` | Stat card numeric value | `2`, `6`, `13` |
 | `{{LABEL}}` | Stat card label text | `AI Models`, `Cloud Flows` |
+| `{{ARCHITECTURE_SVG}}` | Full SVG content for architecture diagram | Tier backgrounds, boxes, connections |
+| `{{ERD_SVG}}` | Full SVG content for ERD diagram | Entity boxes, fields, relationships |
 
 ---
 
@@ -478,8 +746,8 @@ const modalData = {
 ```
 
 ### Tabs
-- **Architecture**: Mermaid `graph TB` flowchart in a `.diagram-panel`
-- **ERD**: Mermaid `erDiagram` in a `.diagram-panel`
+- **Architecture**: Inline SVG with tier layout inside a `.diagram-panel`. Use `viewBox="0 0 1400 1200"`. Include `<defs>` with arrowhead markers and glow filter. Draw tier backgrounds, component boxes, L-shaped connection paths with pill labels, and step badges.
+- **ERD**: Inline SVG with entity boxes and crow's foot relationships inside a `.diagram-panel`. Use `viewBox="0 0 1200 850"`. Draw entity header bars, body rects, field rows (PK/FK/regular), and relationship lines with crow's foot markers and pill labels.
 - **Data Flows**: `.flow-card` elements with `.flow-steps` timeline
 - **Components**: `.inventory-grid` with `.inv-card` elements per category
 - **Notes**: `.notes-grid` with `.note-card` elements (Strengths, Considerations, Dependencies, Security, ROI)
