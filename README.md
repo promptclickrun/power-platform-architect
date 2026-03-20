@@ -111,7 +111,7 @@ Give this plugin a Power Platform solution — a Copilot Studio agent directory,
 
 1. **Analyze** all components: agents, topics, actions, flows, connectors, data entities, knowledge sources
 2. **Generate** a self-contained, interactive HTML dashboard with:
-   - Mermaid architecture diagrams and ERDs
+   - Architecture diagrams and ERDs (pure inline SVG)
    - Clickable stat cards with detailed modal drawers
    - Data flow timelines with decision branches
    - Full component inventory with IDs and configurations
@@ -144,7 +144,7 @@ A single `{solution-name}-architecture.html` file with 5 interactive tabs:
 
 | Tab | Content |
 |---|---|
-| **Architecture** | Mermaid flowchart with layered component diagram |
+| **Architecture** | Layered component diagram with inline SVG |
 | **ERD** | Entity Relationship Diagram with all data entities |
 | **Data Flows** | Timeline visualization of data movement and decisions |
 | **Components** | Categorized inventory cards with full details |
@@ -162,7 +162,10 @@ After generation, you'll be asked to:
 power-agents-blueprint/
 ├── plugin.json                                  # Plugin manifest
 ├── agents/
-│   └── power-copilot-architect.agent.md         # Agent definition (~130 lines)
+│   ├── power-copilot-architect.agent.md         # Orchestrator — dispatches sub-agents in phases
+│   ├── arch-review.agent.md                     # Phase 1 — solution analysis
+│   ├── dashboard-developer.agent.md             # Phase 2 — HTML dashboard generation (×5 parallel)
+│   └── post-review.agent.md                     # Phase 3 — quality validation
 └── skills/
     ├── architecture-html-dashboard/
     │   └── SKILL.md                             # HTML template + rendering rules (~480 lines)
@@ -172,8 +175,11 @@ power-agents-blueprint/
 
 | Component | Purpose |
 |---|---|
-| **Agent** | Analysis methodology — explores solutions, maps components, traces data flows, orchestrates output |
-| **Dashboard Skill** | Full HTML/CSS/JS template with dark theme, Mermaid diagrams, modal drawers, responsive layout |
+| **Orchestrator Agent** | Coordinates phased execution: arch-review → 5 parallel dashboard developers → post-review |
+| **Arch-Review Agent** | Unpacks and catalogs every solution component, maps data flows, documents integrations |
+| **Dashboard Developer Agent** | Generates the HTML dashboard — runs as 5 domain-focused instances co-developing one file |
+| **Post-Review Agent** | Validates HTML structure, SVG correctness, component coverage, and stat card accuracy |
+| **Dashboard Skill** | Full HTML/CSS/JS template with dark theme, inline SVG diagrams, modal drawers, responsive layout |
 | **PageDrop Skill** | API reference for uploading HTML to shareable time-limited links |
 
 ---
@@ -182,7 +188,7 @@ power-agents-blueprint/
 
 - **GitHub Copilot CLI** or **Claude Code** with plugin support
 - **PowerShell** (for `Start-Process` and `Invoke-RestMethod`)
-- **Internet access** for Mermaid CDN and PageDrop API
+- **Internet access** for PageDrop API (optional, only for shareable links)
 
 No API keys, tokens, or authentication required.
 
